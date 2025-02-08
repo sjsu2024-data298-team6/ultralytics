@@ -64,6 +64,7 @@ from ultralytics.nn.modules import (
     WorldDetect,
     v10Detect,
     Involution,
+    Involution2,
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
@@ -983,6 +984,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             SCDown,
             C2fCIB,
             Involution,
+            Involution2,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1001,6 +1003,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             C2fPSA,
             C2fCIB,
             C2PSA,
+            Involution,
+            Involution2,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
