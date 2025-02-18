@@ -353,8 +353,8 @@ class Index(nn.Module):
 
 class Involution2(nn.Module):
 
-    #def __init__(self, c1, c2, kernel_size, stride, g):
-    def __init__(self, c1, kernel_size, stride):
+    def __init__(self, c1, c2, kernel_size, stride, g):
+    #def __init__(self, c1, kernel_size, stride):
         #super(Involution2, self).__init__()
         super().__init__()
         self.kernel_size = kernel_size
