@@ -626,46 +626,41 @@ class v10Detect(Detect):
 
 
 class BiFPNLayer(nn.Module):
-    def __init__(self, in_channels_list, out_channels):
+    def __init__(self, out_channels):
         super().__init__()
-        self.conv_p3 = Conv(in_channels_list[0], out_channels, 1, 1)
-        self.conv_p4 = Conv(in_channels_list[1], out_channels, 1, 1)
-        self.conv_p5 = Conv(in_channels_list[2], out_channels, 1, 1)
-        self.weights = nn.Parameter(torch.ones(3))  # Learnable fusion weights
-        self.downsample = Conv(out_channels, out_channels, 3, 2)
+        self.conv = Conv(out_channels * 3, out_channels, 1, 1)  # Reduce channels
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
+        self.downsample = Conv(out_channels, out_channels, 3, 2)
+        self.weights = nn.Parameter(torch.ones(3))  # Learnable weights
     
-    def forward(self, inputs):
-        p3, p4, p5 = inputs
-        p3 = self.conv_p3(p3)
-        p4 = self.conv_p4(p4)
-        p5 = self.conv_p5(p5)
-        # Top-down
+    def forward(self, x):
+        # Split concatenated input into P3, P4, P5 (assuming channel-wise split)
+        p3, p4, p5 = x.chunk(3, dim=1)  # Split 768 channels into 3x256
+        # Top-down path
         p4_td = self.upsample(p5) * self.weights[0] + p4 * self.weights[1]
         p3_td = self.upsample(p4_td) * self.weights[2] + p3
-        # Bottom-up
+        # Bottom-up path
         p4_bu = self.downsample(p3_td) + p4_td
         p5_bu = self.downsample(p4_bu) + p5
-        return [p3_td, p4_bu, p5_bu]
+        return [p3_td, p4_bu, p5_bu]  # Return list of feature maps
 
 
 class RTDETRDecoderCustom(nn.Module):
     def __init__(self, channels, num_layers, num_queries):
-        super().__init__()
-        self.query_embed = nn.Embedding(num_queries, channels)
-        self.layers = nn.ModuleList([
-            TransformerDecoderLayer(channels, 8) for _ in range(num_layers)
-        ])
-        self.proj = Conv(channels, channels, 1, 1)
+            super().__init__()
+            self.query_embed = nn.Embedding(num_queries, channels)
+            self.layers = nn.ModuleList([
+                TransformerDecoderLayer(channels, 8) for _ in range(num_layers)
+            ])
+            self.proj = Conv(channels, channels, 1, 1)
     
     def forward(self, inputs):
-        p3, p4, p5 = inputs
-        # Flatten spatial dimensions and concatenate
-        feats = torch.cat([p.flatten(2).transpose(1, 2) for p in inputs], dim=1)
+        p3, p4, p5 = inputs  # List of 3 feature maps from BiFPN
+        feats = torch.cat([p.flatten(2).transpose(1, 2) for p in [p3, p4, p5]], dim=1)
         queries = self.query_embed.weight.unsqueeze(0).repeat(feats.size(0), 1, 1)
         for layer in self.layers:
             queries = layer(queries, feats)
-        return self.proj(queries)
+        return self.proj(queries)  # [B, 300, 256]
 
 class MultiDetect(nn.Module):
     def __init__(self, nc, channels):
