@@ -650,7 +650,7 @@ class RTDETRDecoderCustom(nn.Module):
             super().__init__()
             self.query_embed = nn.Embedding(num_queries, channels)
             self.layers = nn.ModuleList([
-                TransformerDecoderLayer(channels, 8) for _ in range(num_layers)
+                nn.TransformerDecoderLayer(channels, 8) for _ in range(num_layers)
             ])
             self.proj = Conv(channels, channels, 1, 1)
     
