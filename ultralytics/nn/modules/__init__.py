@@ -58,6 +58,7 @@ from .block import (
     SCDown,
     TorchVision,
     Involution,
+    CustomTR,
 )
 from .conv import (
     CBAM,
@@ -88,6 +89,8 @@ from .transformer import (
     TransformerBlock,
     TransformerEncoderLayer,
     TransformerLayer,
+    CMHSA,
+    ECTB,
 )
 
 __all__ = (
@@ -163,4 +166,8 @@ __all__ = (
     "TorchVision",
     "Involution",
     "Index",
+    "Involution2",
+    "CustomTR",
+    "CMHSA",
+    "ECTB",
 )

@@ -22,7 +22,8 @@ __all__ = (
     "DeformableTransformerDecoderLayer",
     "MSDeformAttn",
     "MLP",
-#    "CMHSA",
+    "CMHSA",
+    "ECTB",
 )
 
 
@@ -429,77 +430,94 @@ class DeformableTransformerDecoder(nn.Module):
     
 
 # CMHSA
-# class CMHSA(nn.Module):
-#     """
-#     Implementing convolutional multihead self attention
-#     as is from https://doi.org/10.1109/TIM.2023.3241825
-#     """
-#     def __init__(self, embed_dim, num_heads):
-#         super().__init__()
+class CMHSA(nn.Module):
+     """
+     Implementing convolutional multihead self attention
+     as is from https://doi.org/10.1109/TIM.2023.3241825
+     """
+     def __init__(self, embed_dim, num_heads):
+         super().__init__()
 
-#         # used for the scaling for Q @ K
-#         self.head_dim = embed_dim/num_heads
+         # used for the scaling for Q @ K
+         self.head_dim = embed_dim/num_heads
 
-#         # One key difference is that the paper uses convolutions instead of linear for the vectors
-#         self.q = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
-#         self.k = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
-#         self.v = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
+         # One key difference is that the paper uses convolutions instead of linear for the vectors
+         self.q = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
+         self.k = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
+         self.v = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
 
 #         # Paper has a conv layer between scaled dot product and softmax
-#         self.conv1 = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
+         self.conv1 = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
 
-#         self.sm = nn.Softmax(dim=-1)
-#         self.norm = nn.InstanceNorm2d(embed_dim)
-#         self.fc1 = nn.Linear(embed_dim, embed_dim, bias=False)
+         self.sm = nn.Softmax(dim=-1)
+         self.norm = nn.InstanceNorm2d(embed_dim)
+         self.fc1 = nn.Linear(embed_dim, embed_dim, bias=False)
 
-#     def forward(self, x):
-#         b, c, h, w = x.shape
+     def forward(self, x):
+         b, c, h, w = x.shape
 
-#         q = self.q(x)
-#         k = self.k(x)
-#         v = self.v(x)
+         q = self.q(x)
+         k = self.k(x)
+         v = self.v(x)
 
 #         # Flatten layer for subsequent processing; this needs to be done for the transformer to use convs
-#         q = q.flatten(2).permute(0, 2, 1) # Put into form (b, h*w, c)
-#         k = k.flatten(2).permute(0,2,1)
-#         v = v.flatten(2).permute(0,2,1)
+         q = q.flatten(2).permute(0, 2, 1) # Put into form (b, h*w, c)
+         k = k.flatten(2).permute(0,2,1)
+         v = v.flatten(2).permute(0,2,1)
 
 #         # scaled dot product
 #         # transpose with (1,2) to allow matrix multiplication
-#         attn_score = torch.matmul(q, k.transpose(1,2)) / (self.head_dim**0.5)
+         attn_score = torch.matmul(q, k.transpose(1,2)) / (self.head_dim**0.5)
 
 #         # conv
-#         attn_score = self.conv1(attn_score)
+         attn_score = self.conv1(attn_score)
 
 #         # paper uses softmax, then uses instance normalization
-#         attn_score = self.sm(attn_score)
-#         attn_score = self.norm(attn_score)
+         attn_score = self.sm(attn_score)
+         attn_score = self.norm(attn_score)
 
 #         # dot product QK and V
-#         output = torch.matmul(attn_score, v)
-#         output = self.fc1(output)
+         output = torch.matmul(attn_score, v)
+         output = self.fc1(output)
 
 #         # paper uses a view to reshape output
-#         output = output.permute(0, 2, 1).reshape(b, c, h, w) # reshape to proper shape
-#         return output + x
+         output = output.permute(0, 2, 1).reshape(b, c, h, w) # reshape to proper shape
+         return output + x
     
-#class ECTB(nn.Module):
-#    """
-#    Implementing ECTB (efficient convolutional transformer block)
-#    from https://doi.org/10.1109/TIM.2023.3241825
-#    """
-#    def __init__(self, c1, c2, num_heads, num_layers):
-#        super().__init__()
-#        self.conv=None
-#        if c1 != c2:
-#            self.conv = Conv(c1, c2)
-#
-#        # position embedding
-#        self.linear = nn.Linear(c2, c2)
+class ECTB(nn.Module):
+    """
+    Implementing ECTB (efficient convolutional transformer block)
+    from https://doi.org/10.1109/TIM.2023.3241825
+    """
+    def __init__(self, c1, c2, num_heads, num_layers):
+        super().__init__()
+
+        self.conv_s1 = Conv(c1, c2//2)
+        self.conv_s2 = Conv(c1, c2//2)
+        self.conv_3 = Conv(c2//2, c2)
+        # position embedding
+        # do I need positional embedding? I don't see mention of it in the paper
+        #self.linear = nn.Linear(c2, c2)
 
         # Attention layer
-#        self.tr = nn.Sequential(*(TransformerLayer(c2, num_heads) for _ in range(num_layers)))
-#        self.c2 = c2
+        # I don't see the paper reference the number of transformer layers used
+        # using 1 for now.
+        self.tr = nn.Sequential(*(CMHSA(c2//2, num_heads) for _ in range(num_layers)))
+        self.c2 = c2
+
+    def forward(self, x):
+        """Forward propagates the input through the bottleneck module."""
+        out1 = self.conv_s1(x)
+        out2 = self.conv_s2(x)
+
+        out1 = self.tr(x)
+
+        concatenated_output = torch.cat((out1, out2), dim=1)
+        concatenated_output = self.conv_3(concatenated_output)
+        #b, _, w, h = x.shape
+        #p = x.flatten(2).permute(2, 0, 1)
+        #return self.tr(p + self.linear(p)).permute(1, 2, 0).reshape(b, self.c2, w, h)
+        return concatenated_output
     
 
 

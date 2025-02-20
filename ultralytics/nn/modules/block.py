@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
-from .transformer import TransformerBlock
+from .transformer import TransformerBlock, ECTB
 
 __all__ = (
     "DFL",
@@ -51,6 +51,7 @@ __all__ = (
     "SCDown",
     "TorchVision",
     "Involution",
+    "CustomTR",
 )
 
 
@@ -1187,3 +1188,12 @@ class Involution(nn.Module):
         out = (weight * out).sum(dim=3).view(b, self.c1, h, w)
 
         return out
+    
+class CustomTR(C3):
+    """C3 module with TransformerBlock()."""
+
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+        """Initialize C3Ghost module with GhostBottleneck()."""
+        super().__init__(c1, c2, n, shortcut, g, e)
+        c_ = int(c2 * e)
+        self.m = ECTB(c_, c_, 4, n)
