@@ -15,7 +15,7 @@ from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
 
-__all__ = "Detect", "Segment", "Pose", "Classify", "OBB", "RTDETRDecoder", "v10Detect"
+__all__ = "Detect", "Segment", "Pose", "Classify", "OBB", "RTDETRDecoder", "v10Detect", "BiFPNLayer", "RTDETRDecoderCustom", "MultiDetect"
 
 
 class Detect(nn.Module):
@@ -623,3 +623,59 @@ class v10Detect(Detect):
             for x in ch
         )
         self.one2one_cv3 = copy.deepcopy(self.cv3)
+
+
+class BiFPNLayer(nn.Module):
+    def __init__(self, in_channels_list, out_channels):
+        super().__init__()
+        self.conv_p3 = Conv(in_channels_list[0], out_channels, 1, 1)
+        self.conv_p4 = Conv(in_channels_list[1], out_channels, 1, 1)
+        self.conv_p5 = Conv(in_channels_list[2], out_channels, 1, 1)
+        self.weights = nn.Parameter(torch.ones(3))  # Learnable fusion weights
+        self.downsample = Conv(out_channels, out_channels, 3, 2)
+        self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
+    
+    def forward(self, inputs):
+        p3, p4, p5 = inputs
+        p3 = self.conv_p3(p3)
+        p4 = self.conv_p4(p4)
+        p5 = self.conv_p5(p5)
+        # Top-down
+        p4_td = self.upsample(p5) * self.weights[0] + p4 * self.weights[1]
+        p3_td = self.upsample(p4_td) * self.weights[2] + p3
+        # Bottom-up
+        p4_bu = self.downsample(p3_td) + p4_td
+        p5_bu = self.downsample(p4_bu) + p5
+        return [p3_td, p4_bu, p5_bu]
+
+
+class RTDETRDecoderCustom(nn.Module):
+    def __init__(self, channels, num_layers, num_queries):
+        super().__init__()
+        self.query_embed = nn.Embedding(num_queries, channels)
+        self.layers = nn.ModuleList([
+            TransformerDecoderLayer(channels, 8) for _ in range(num_layers)
+        ])
+        self.proj = Conv(channels, channels, 1, 1)
+    
+    def forward(self, inputs):
+        p3, p4, p5 = inputs
+        # Flatten spatial dimensions and concatenate
+        feats = torch.cat([p.flatten(2).transpose(1, 2) for p in inputs], dim=1)
+        queries = self.query_embed.weight.unsqueeze(0).repeat(feats.size(0), 1, 1)
+        for layer in self.layers:
+            queries = layer(queries, feats)
+        return self.proj(queries)
+
+class MultiDetect(nn.Module):
+    def __init__(self, nc, channels):
+        super().__init__()
+        self.box_head = nn.Linear(channels, 4)  # Bounding box regression
+        self.cls_head = nn.Linear(channels, nc)  # Class prediction
+        self.obj_head = nn.Linear(channels, 1)  # Objectness score
+    
+    def forward(self, x):
+        boxes = torch.sigmoid(self.box_head(x))  # [B, 300, 4]
+        classes = self.cls_head(x)               # [B, 300, nc]
+        scores = torch.sigmoid(self.obj_head(x)) # [B, 300, 1]
+        return torch.cat([boxes, scores, classes], dim=-1)
