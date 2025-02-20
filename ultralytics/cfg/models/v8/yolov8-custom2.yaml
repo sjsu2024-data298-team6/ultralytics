@@ -35,7 +35,7 @@ head:
 
 # RT-DETR Transformer Decoder
   # [from, repeats, module, args]
-  - [[10, 11, 12], 1, RTDETRDecoder, [256, 6, 300]]  # 13: Input from BiFPN, 6 layers, 300 queries
+  - [[10, 11, 12], 1, RTDETRDecoderCustom, [256, 6, 300]]  # 13: Input from BiFPN, 6 layers, 300 queries
 
 # Multi YOLO Detection Heads
 
