@@ -74,7 +74,7 @@ from .conv import (
     RepConv,
     SpatialAttention,
 )
-from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect
+from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect, BiFPNLayer, RTDETRDecoderCustom, MultiDetect
 from .transformer import (
     AIFI,
     MLP,
@@ -160,4 +160,5 @@ __all__ = (
     "PSA",
     "TorchVision",
     "Index",
+    "BiFPNLayer", "RTDETRDecoderCustom", "MultiDetect",
 )
