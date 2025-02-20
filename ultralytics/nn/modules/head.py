@@ -628,22 +628,24 @@ class v10Detect(Detect):
 class BiFPNLayer(nn.Module):
     def __init__(self, out_channels):
         super().__init__()
-        self.conv = Conv(out_channels * 3, out_channels, 1, 1)  # Reduce channels
+        self.conv_p3 = Conv(out_channels, out_channels, 3, 1)
+        self.conv_p4 = Conv(out_channels, out_channels, 3, 1)
+        self.conv_p5 = Conv(out_channels, out_channels, 3, 1)
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
         self.downsample = Conv(out_channels, out_channels, 3, 2)
-        self.weights = nn.Parameter(torch.ones(3))  # Learnable weights
+        self.weights = nn.Parameter(torch.ones(3))
     
     def forward(self, x):
-        # Split concatenated input into P3, P4, P5 (assuming channel-wise split)
-        p3, p4, p5 = x.chunk(3, dim=1)  # Split 768 channels into 3x256
+        p3, p4, p5 = x.chunk(3, dim=1)
         # Top-down path
-        p4_td = self.upsample(p5) * self.weights[0] + p4 * self.weights[1]
-        p3_td = self.upsample(p4_td) * self.weights[2] + p3
+        p5_up = self.upsample(p5)
+        p4_td = p5_up * self.weights[0] + p4 * self.weights[1]
+        p4_td_up = self.upsample(p4_td)
+        p3_td = p4_td_up * self.weights[2] + p3
         # Bottom-up path
         p4_bu = self.downsample(p3_td) + p4_td
         p5_bu = self.downsample(p4_bu) + p5
-        return [p3_td, p4_bu, p5_bu]  # Return list of feature maps
-
+        return [self.conv_p3(p3_td), self.conv_p4(p4_bu), self.conv_p5(p5_bu)]
 
 class RTDETRDecoderCustom(nn.Module):
     def __init__(self, channels, num_layers, num_queries):
