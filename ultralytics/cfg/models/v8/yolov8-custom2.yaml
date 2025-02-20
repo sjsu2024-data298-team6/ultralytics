@@ -25,17 +25,20 @@ backbone:
 
 # BiFPN (Bidirectional Feature Pyramid Network)
 head:
+  - [4, 1, Conv, [256, 1, 1]]   # 10: P3 -> 256 channels
+  - [6, 1, Conv, [256, 1, 1]]   # 11: P4 -> 256 channels
+  - [9, 1, Conv, [256, 1, 1]]   # 12: P5 -> 256 channels
+  - [[10, 11, 12], 1, Concat, [1]]
   # Define BiFPN layers with inputs from backbone P3, P4, P5 (layers 4, 6, 9)
   # [from, repeats, module, args]
   # First BiFPN layer: Top-down and bottom-up fusion
-  - [[4, 6, 9], 1, BiFPNLayer, [256]]  # 10: Fuse P3, P4, P5 -> 256 channels
   # Additional BiFPN layers for iterative refinement (e.g., 2 repeats)
   - [-1, 1, BiFPNLayer, [256]]         # 11: Refine fused features
   - [-1, 1, BiFPNLayer, [256]]         # 12: Final BiFPN output (P3', P4', P5')
 
 # RT-DETR Transformer Decoder
   # [from, repeats, module, args]
-  - [[10, 11, 12], 1, RTDETRDecoderCustom, [256, 6, 300]]  # 13: Input from BiFPN, 6 layers, 300 queries
+  - [-1, 1, RTDETRDecoderCustom, [256, 6, 300]]  # 13: Input from BiFPN, 6 layers, 300 queries
 
 # Multi YOLO Detection Heads
 
