@@ -464,8 +464,8 @@ class RTDETRDecoder(nn.Module):
             self.num_denoising,
             self.label_noise_ratio,
             self.box_noise_scale,
-            self.training,
-            # False,
+            # self.training,
+            False,
         )
 
         embed, refer_bbox, enc_bboxes, enc_scores = self._get_decoder_input(feats, shapes, dn_embed, dn_bbox)
