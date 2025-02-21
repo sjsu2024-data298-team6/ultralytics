@@ -447,7 +447,8 @@ class CMHSA(nn.Module):
          self.v = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
 
 #         # Paper has a conv layer between scaled dot product and softmax
-         self.conv1 = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
+        # not sure how to initialize this, since I need the input and output to be h*w, but I don't have that
+         #self.conv1 = nn.Conv2d(embed_dim, embed_dim, kernel_size=1, bias=False)
 
          self.sm = nn.Softmax(dim=-1)
          self.norm = nn.InstanceNorm2d(embed_dim)
@@ -469,8 +470,8 @@ class CMHSA(nn.Module):
 #         # transpose with (1,2) to allow matrix multiplication
          attn_score = torch.matmul(q, k.transpose(1,2)) / (self.head_dim**0.5)
 
-#         # conv
-         attn_score = self.conv1(attn_score)
+#         # conv; conv1 not properly initialized
+        # attn_score = self.conv1(attn_score)
 
 #         # paper uses softmax, then uses instance normalization
          attn_score = self.sm(attn_score)
@@ -494,7 +495,7 @@ class ECTB(nn.Module):
 
         self.conv_s1 = Conv(c1, c2//2)
         self.conv_s2 = Conv(c1, c2//2)
-        self.conv_3 = Conv(c2//2, c2)
+        self.conv_3 = Conv(c2, c2)
         # position embedding
         # do I need positional embedding? I don't see mention of it in the paper
         #self.linear = nn.Linear(c2, c2)
@@ -508,16 +509,13 @@ class ECTB(nn.Module):
     def forward(self, x):
         """Forward propagates the input through the bottleneck module."""
         out1 = self.conv_s1(x)
+        out1 = self.tr(out1)
+
         out2 = self.conv_s2(x)
-
-        out1 = self.tr(x)
-
-        concatenated_output = torch.cat((out1, out2), dim=1)
-        concatenated_output = self.conv_3(concatenated_output)
-        #b, _, w, h = x.shape
-        #p = x.flatten(2).permute(2, 0, 1)
-        #return self.tr(p + self.linear(p)).permute(1, 2, 0).reshape(b, self.c2, w, h)
-        return concatenated_output
+        
+        out = torch.cat((out1, out2), dim=1)
+        out = self.conv_3(out)
+        return out
     
 
 
