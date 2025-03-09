@@ -1166,11 +1166,12 @@ class MHSA(nn.Module):
     def __init__(self, embed_dim=1024, num_heads=4, dropout=0.1):
         """
         Multi-Head Self-Attention Block
-        :param embed_dim: Feature dimension
+        :param embed_dim: Feature dimension (should match input channels)
         :param num_heads: Number of attention heads
         :param dropout: Dropout rate
         """
         super(MHSA, self).__init__()
+        assert embed_dim % num_heads == 0, "Embedding dimension must be divisible by number of heads"
         self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
         self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
@@ -1181,12 +1182,12 @@ class MHSA(nn.Module):
         :return: Output feature map of same shape
         """
         B, C, H, W = x.shape
-        x = x.view(B, C, -1).permute(0, 2, 1)  # Reshape to (B, N, C), where N=H*W
+        assert C == self.mhsa.embed_dim, f"Expected embedding dimension {self.mhsa.embed_dim}, but got {C}"
+
+        x = x.view(B, C, -1).permute(0, 2, 1)  # Reshape to (B, N, C) where N = H*W
 
         attn_output, _ = self.mhsa(x, x, x)  # Self-attention
         x = self.norm(x + self.dropout(attn_output))  # Residual connection
 
         x = x.permute(0, 2, 1).view(B, C, H, W)  # Reshape back to (B, C, H, W)
         return x
-
-
