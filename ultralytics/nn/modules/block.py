@@ -1163,37 +1163,41 @@ import torch
 import torch.nn as nn
 
 class MHSA(nn.Module):
-    def __init__(self, input_dim, num_heads=4):
+    def __init__(self, input_dim, heads=8):
         super(MHSA, self).__init__()
         self.input_dim = input_dim
-        self.num_heads = num_heads
+        self.heads = heads
+        self.head_dim = input_dim // heads  # Splitting input into multiple heads
+        assert self.head_dim * heads == input_dim, "Input channels must be divisible by the number of heads"
 
-        # Linear projections for Query, Key, and Value
-        self.q_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
-        self.k_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
-        self.v_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
+        # Linear projections for Q, K, V
+        self.query = nn.Conv2d(input_dim, input_dim, kernel_size=1)
+        self.key = nn.Conv2d(input_dim, input_dim, kernel_size=1)
+        self.value = nn.Conv2d(input_dim, input_dim, kernel_size=1)
 
-        # Multi-Head Attention Layer
-        self.attention = nn.MultiheadAttention(embed_dim=input_dim, num_heads=num_heads, batch_first=True)
-
+        # Softmax for attention scores
+        self.softmax = nn.Softmax(dim=-1)
+        
         # Output projection
-        self.out_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
+        self.proj = nn.Conv2d(input_dim, input_dim, kernel_size=1)
 
     def forward(self, x):
-        batch_size, C, H, W = x.shape  # [batch, channels, height, width]
-        x_reshaped = x.view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
+        B, C, H, W = x.shape  # Batch, Channels, Height, Width
+        N = H * W  # Number of pixels (tokens)
 
-        # Compute Q, K, V
-        q = self.q_proj(x).view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
-        k = self.k_proj(x).view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
-        v = self.v_proj(x).view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
+        # Transform inputs for attention
+        q = self.query(x).view(B, self.heads, self.head_dim, N).permute(0, 1, 3, 2)  # (B, heads, N, head_dim)
+        k = self.key(x).view(B, self.heads, self.head_dim, N).permute(0, 1, 2, 3)  # (B, heads, head_dim, N)
+        v = self.value(x).view(B, self.heads, self.head_dim, N).permute(0, 1, 3, 2)  # (B, heads, N, head_dim)
 
-        # Apply Multi-Head Attention
-        attn_output, _ = self.attention(q, k, v)
-        attn_output = attn_output.permute(0, 2, 1).view(batch_size, C, H, W)  # Reshape back to [batch, C, H, W]
+        # Compute attention scores
+        attn = torch.matmul(q, k) / (self.head_dim ** 0.5)  # Scaled dot product attention
+        attn = self.softmax(attn)  # (B, heads, N, N)
 
-        # Output Projection
-        output = self.out_proj(attn_output)
+        # Apply attention to values
+        out = torch.matmul(attn, v)  # (B, heads, N, head_dim)
+        out = out.permute(0, 1, 3, 2).contiguous().view(B, C, H, W)  # Reshape back to (B, C, H, W)
 
-        return output
+        return self.proj(out)  # Apply final linear projection
+
 
