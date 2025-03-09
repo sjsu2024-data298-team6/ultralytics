@@ -1159,9 +1159,6 @@ class TorchVision(nn.Module):
 
 #################################################################################################
 
-import torch
-import torch.nn as nn
-
 class MHSA(nn.Module):
     def __init__(self, input_dim, heads=8):
         super(MHSA, self).__init__()
@@ -1170,6 +1167,9 @@ class MHSA(nn.Module):
         self.head_dim = input_dim // heads  # Splitting input into multiple heads
         assert self.head_dim * heads == input_dim, "Input channels must be divisible by the number of heads"
 
+        # Learnable positional embeddings
+        self.pos_embedding = nn.Parameter(torch.randn(1, input_dim, 1, 1))  # (1, C, 1, 1)
+
         # Linear projections for Q, K, V
         self.query = nn.Conv2d(input_dim, input_dim, kernel_size=1)
         self.key = nn.Conv2d(input_dim, input_dim, kernel_size=1)
@@ -1177,13 +1177,16 @@ class MHSA(nn.Module):
 
         # Softmax for attention scores
         self.softmax = nn.Softmax(dim=-1)
-        
+
         # Output projection
         self.proj = nn.Conv2d(input_dim, input_dim, kernel_size=1)
 
     def forward(self, x):
         B, C, H, W = x.shape  # Batch, Channels, Height, Width
-        N = H * W  # Number of pixels (tokens)
+        N = H * W  # Number of spatial tokens
+
+        # Add positional embedding
+        x = x + self.pos_embedding  # (B, C, H, W)
 
         # Transform inputs for attention
         q = self.query(x).view(B, self.heads, self.head_dim, N).permute(0, 1, 3, 2)  # (B, heads, N, head_dim)
@@ -1199,5 +1202,4 @@ class MHSA(nn.Module):
         out = out.permute(0, 1, 3, 2).contiguous().view(B, C, H, W)  # Reshape back to (B, C, H, W)
 
         return self.proj(out)  # Apply final linear projection
-
 
