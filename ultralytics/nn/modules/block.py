@@ -1163,36 +1163,30 @@ import torch
 import torch.nn as nn
 
 class MHSA(nn.Module):
-    def __init__(self, dim, heads=8, dropout=0.1):
+    def __init__(self, embed_dim, num_heads, dropout=0.1):
+        """
+        Multi-Head Self-Attention Block
+        :param embed_dim: Feature dimension
+        :param num_heads: Number of attention heads
+        :param dropout: Dropout rate
+        """
         super(MHSA, self).__init__()
-        self.dim = dim
-        self.heads = heads
-        self.head_dim = dim // heads
-        assert self.head_dim * heads == dim, "Embedding dimension must be divisible by number of heads"
-
-        # Linear layers for Q, K, V
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
-        self.attn_dropout = nn.Dropout(dropout)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_dropout = nn.Dropout(dropout)
+        self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(embed_dim)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        B, N, C = x.shape  # (batch_size, num_tokens, embedding_dim)
+        """
+        :param x: Input feature map of shape (B, C, H, W)
+        :return: Output feature map of same shape
+        """
+        B, C, H, W = x.shape
+        x = x.view(B, C, -1).permute(0, 2, 1)  # Reshape to (B, N, C), where N=H*W
 
-        # Compute Q, K, V
-        qkv = self.qkv(x).reshape(B, N, 3, self.heads, self.head_dim).permute(2, 0, 3, 1, 4)  # (3, B, heads, N, head_dim)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        attn_output, _ = self.mhsa(x, x, x)  # Self-attention
+        x = self.norm(x + self.dropout(attn_output))  # Residual connection
 
-        # Scaled Dot-Product Attention
-        attn_scores = (q @ k.transpose(-2, -1)) / (self.head_dim ** 0.5)  # (B, heads, N, N)
-        attn = attn_scores.softmax(dim=-1)
-        attn = self.attn_dropout(attn)
-
-        # Apply attention to values
-        out = (attn @ v).transpose(1, 2).reshape(B, N, C)  # (B, N, C)
-        out = self.proj(out)
-        out = self.proj_dropout(out)
-
-        return out
+        x = x.permute(0, 2, 1).view(B, C, H, W)  # Reshape back to (B, C, H, W)
+        return x
 
 
