@@ -1159,47 +1159,40 @@ class TorchVision(nn.Module):
 
 #################################################################################################
 
+import torch
+import torch.nn as nn
+
 class MHSA(nn.Module):
-    def __init__(self, input_dim, heads=8):
+    def __init__(self, dim, heads=8, dropout=0.1):
         super(MHSA, self).__init__()
-        self.input_dim = input_dim
+        self.dim = dim
         self.heads = heads
-        self.head_dim = input_dim // heads  # Splitting input into multiple heads
-        assert self.head_dim * heads == input_dim, "Input channels must be divisible by the number of heads"
+        self.head_dim = dim // heads
+        assert self.head_dim * heads == dim, "Embedding dimension must be divisible by number of heads"
 
-        # Learnable positional embeddings
-        self.pos_embedding = nn.Parameter(torch.randn(1, input_dim, 1, 1))  # (1, C, 1, 1)
-
-        # Linear projections for Q, K, V
-        self.query = nn.Conv2d(input_dim, input_dim, kernel_size=1)
-        self.key = nn.Conv2d(input_dim, input_dim, kernel_size=1)
-        self.value = nn.Conv2d(input_dim, input_dim, kernel_size=1)
-
-        # Softmax for attention scores
-        self.softmax = nn.Softmax(dim=-1)
-
-        # Output projection
-        self.proj = nn.Conv2d(input_dim, input_dim, kernel_size=1)
+        # Linear layers for Q, K, V
+        self.qkv = nn.Linear(dim, dim * 3, bias=False)
+        self.attn_dropout = nn.Dropout(dropout)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        B, C, H, W = x.shape  # Batch, Channels, Height, Width
-        N = H * W  # Number of spatial tokens
+        B, N, C = x.shape  # (batch_size, num_tokens, embedding_dim)
 
-        # Add positional embedding
-        x = x + self.pos_embedding  # (B, C, H, W)
+        # Compute Q, K, V
+        qkv = self.qkv(x).reshape(B, N, 3, self.heads, self.head_dim).permute(2, 0, 3, 1, 4)  # (3, B, heads, N, head_dim)
+        q, k, v = qkv[0], qkv[1], qkv[2]
 
-        # Transform inputs for attention
-        q = self.query(x).view(B, self.heads, self.head_dim, N).permute(0, 1, 3, 2)  # (B, heads, N, head_dim)
-        k = self.key(x).view(B, self.heads, self.head_dim, N).permute(0, 1, 2, 3)  # (B, heads, head_dim, N)
-        v = self.value(x).view(B, self.heads, self.head_dim, N).permute(0, 1, 3, 2)  # (B, heads, N, head_dim)
-
-        # Compute attention scores
-        attn = torch.matmul(q, k) / (self.head_dim ** 0.5)  # Scaled dot product attention
-        attn = self.softmax(attn)  # (B, heads, N, N)
+        # Scaled Dot-Product Attention
+        attn_scores = (q @ k.transpose(-2, -1)) / (self.head_dim ** 0.5)  # (B, heads, N, N)
+        attn = attn_scores.softmax(dim=-1)
+        attn = self.attn_dropout(attn)
 
         # Apply attention to values
-        out = torch.matmul(attn, v)  # (B, heads, N, head_dim)
-        out = out.permute(0, 1, 3, 2).contiguous().view(B, C, H, W)  # Reshape back to (B, C, H, W)
+        out = (attn @ v).transpose(1, 2).reshape(B, N, C)  # (B, N, C)
+        out = self.proj(out)
+        out = self.proj_dropout(out)
 
-        return self.proj(out)  # Apply final linear projection
+        return out
+
 
