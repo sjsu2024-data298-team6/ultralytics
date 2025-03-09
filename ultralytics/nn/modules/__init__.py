@@ -57,6 +57,7 @@ from .block import (
     ResNetLayer,
     SCDown,
     TorchVision,
+    MHSA,
 )
 from .conv import (
     CBAM,
@@ -161,4 +162,5 @@ __all__ = (
     "TorchVision",
     "Index",
     "BiFPNLayer", "RTDETRDecoderCustom", "MultiDetect",
+    "MHSA",
 )
