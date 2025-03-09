@@ -1171,7 +1171,7 @@ class MHSA(nn.Module):
         :param dropout: Dropout rate
         """
         super(MHSA, self).__init__()
-        # assert embed_dim % num_heads == 0, "Embedding dimension must be divisible by number of heads"
+        assert embed_dim % num_heads == 0, "Embedding dimension must be divisible by number of heads"
         self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
         self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
@@ -1182,7 +1182,7 @@ class MHSA(nn.Module):
         :return: Output feature map of same shape
         """
         B, C, H, W = x.shape
-        assert C == self.mhsa.embed_dim, f"Expected embedding dimension {self.mhsa.embed_dim}, but got {C}"
+        # assert C == self.mhsa.embed_dim, f"Expected embedding dimension {self.mhsa.embed_dim}, but got {C}"
 
         x = x.view(B, C, -1).permute(0, 2, 1)  # Reshape to (B, N, C) where N = H*W
 
