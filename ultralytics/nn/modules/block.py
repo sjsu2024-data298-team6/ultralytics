@@ -50,6 +50,7 @@ __all__ = (
     "PSA",
     "SCDown",
     "TorchVision",
+    "MHSA",
 )
 
 
@@ -1154,3 +1155,45 @@ class TorchVision(nn.Module):
         else:
             y = self.m(x)
         return y
+
+
+#################################################################################################
+
+import torch
+import torch.nn as nn
+
+class MHSA(nn.Module):
+    def __init__(self, input_dim, num_heads=8):
+        super(MHSA, self).__init__()
+        self.input_dim = input_dim
+        self.num_heads = num_heads
+
+        # Linear projections for Query, Key, and Value
+        self.q_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
+        self.k_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
+        self.v_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
+
+        # Multi-Head Attention Layer
+        self.attention = nn.MultiheadAttention(embed_dim=input_dim, num_heads=num_heads, batch_first=True)
+
+        # Output projection
+        self.out_proj = nn.Conv2d(input_dim, input_dim, kernel_size=1, bias=False)
+
+    def forward(self, x):
+        batch_size, C, H, W = x.shape  # [batch, channels, height, width]
+        x_reshaped = x.view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
+
+        # Compute Q, K, V
+        q = self.q_proj(x).view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
+        k = self.k_proj(x).view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
+        v = self.v_proj(x).view(batch_size, C, -1).permute(0, 2, 1)  # [batch, H*W, C]
+
+        # Apply Multi-Head Attention
+        attn_output, _ = self.attention(q, k, v)
+        attn_output = attn_output.permute(0, 2, 1).view(batch_size, C, H, W)  # Reshape back to [batch, C, H, W]
+
+        # Output Projection
+        output = self.out_proj(attn_output)
+
+        return output
+
