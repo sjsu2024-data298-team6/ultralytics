@@ -1163,7 +1163,7 @@ import torch
 import torch.nn as nn
 
 class MHSA(nn.Module):
-    def __init__(self, input_dim, num_heads=8):
+    def __init__(self, input_dim, num_heads=4):
         super(MHSA, self).__init__()
         self.input_dim = input_dim
         self.num_heads = num_heads
