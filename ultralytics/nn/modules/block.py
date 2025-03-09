@@ -1163,7 +1163,7 @@ import torch
 import torch.nn as nn
 
 class MHSA(nn.Module):
-    def __init__(self, in_channels, embed_dim, num_heads, dropout=0.1):
+    def __init__(self, in_channels, embed_dim, num_heads=4, dropout=0.1):
         """
         Multi-Head Self-Attention Block with projection layers to handle mismatched dimensions.
 
