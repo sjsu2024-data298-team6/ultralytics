@@ -7,7 +7,6 @@ import types
 from copy import deepcopy
 from pathlib import Path
 
-import thop
 import torch
 
 from ultralytics.nn.modules import (
@@ -23,6 +22,7 @@ from ultralytics.nn.modules import (
     SPP,
     SPPELAN,
     SPPF,
+    A2C2f,
     AConv,
     ADown,
     Bottleneck,
@@ -90,6 +90,11 @@ from ultralytics.utils.torch_utils import (
     scale_img,
     time_sync,
 )
+
+try:
+    import thop
+except ImportError:
+    thop = None  # conda support without 'ultralytics-thop' installed
 
 
 class BaseModel(torch.nn.Module):
@@ -638,8 +643,8 @@ class WorldModel(DetectionModel):
             (torch.Tensor): Model's output tensor.
         """
         txt_feats = (self.txt_feats if txt_feats is None else txt_feats).to(device=x.device, dtype=x.dtype)
-        if len(txt_feats) != len(x):
-            txt_feats = txt_feats.repeat(len(x), 1, 1)
+        if len(txt_feats) != len(x) or self.model[-1].export:
+            txt_feats = txt_feats.expand(x.shape[0], -1, -1)
         ori_txt_feats = txt_feats.clone()
         y, dt, embeddings = [], [], []  # outputs
         for m in self.model:  # except the head part
@@ -991,6 +996,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             CMHSA,
             ECTB,
             CustomTR,
+            A2C2f,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1014,6 +1020,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             CMHSA,
             ECTB,
             CustomTR,
+            A2C2f,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1045,6 +1052,10 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
                 legacy = False
                 if scale in "mlx":
                     args[3] = True
+            if m is A2C2f:
+                legacy = False
+                if scale in "lx":  # for L/X sizes
+                    args.extend((True, 1.2))
         elif m is AIFI:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):

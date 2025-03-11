@@ -30,6 +30,7 @@ from .block import (
     SPP,
     SPPELAN,
     SPPF,
+    A2C2f,
     AConv,
     ADown,
     Attention,
@@ -170,4 +171,5 @@ __all__ = (
     "CustomTR",
     "CMHSA",
     "ECTB",
+    "A2C2f",
 )
