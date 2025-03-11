@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
-from .transformer import TransformerBlock
+from .transformer import TransformerBlock, ECTB
 
 __all__ = (
     "DFL",
@@ -50,6 +50,8 @@ __all__ = (
     "PSA",
     "SCDown",
     "TorchVision",
+    "Involution",
+    "CustomTR",
 )
 
 
@@ -1155,6 +1157,45 @@ class TorchVision(nn.Module):
             y = self.m(x)
         return y
 
+class Involution(nn.Module):
+
+    def __init__(self, c1, c2, kernel_size, stride):
+        super(Involution, self).__init__()
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.c1 = c1
+        reduction_ratio = 1
+        self.group_channels = 16
+        self.groups = self.c1 // self.group_channels
+        self.conv1 = Conv(
+            c1, c1 // reduction_ratio, 1)
+        self.conv2 = Conv(
+            c1 // reduction_ratio,
+            kernel_size ** 2 * self.groups,
+            1, 1)
+
+        if stride > 1:
+            self.avgpool = nn.AvgPool2d(stride, stride)
+        self.unfold = nn.Unfold(kernel_size, 1, (kernel_size - 1) // 2, stride)
+
+    def forward(self, x):
+        # weight = self.conv2(self.conv1(x if self.stride == 1 else self.avgpool(x)))
+        weight = self.conv2(x)
+        b, c, h, w = weight.shape
+        weight = weight.view(b, self.groups, self.kernel_size ** 2, h, w).unsqueeze(2)
+        out = self.unfold(x).view(b, self.groups, self.group_channels, self.kernel_size ** 2, h, w)
+        out = (weight * out).sum(dim=3).view(b, self.c1, h, w)
+
+        return out
+    
+class CustomTR(C3):
+    """C3 module with TransformerBlock()."""
+
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+        """Initialize C3Ghost module with GhostBottleneck()."""
+        super().__init__(c1, c2, n, shortcut, g, e)
+        c_ = int(c2 * e)
+        self.m = ECTB(c_, c_, 4, n)
 
 class AAttn(nn.Module):
     """
@@ -1356,3 +1397,4 @@ class A2C2f(nn.Module):
         if self.gamma is not None:
             return x + self.gamma.view(-1, len(self.gamma), 1, 1) * y
         return y
+

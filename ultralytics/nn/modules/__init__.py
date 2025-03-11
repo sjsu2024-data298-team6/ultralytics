@@ -58,6 +58,8 @@ from .block import (
     ResNetLayer,
     SCDown,
     TorchVision,
+    Involution,
+    CustomTR,
 )
 from .conv import (
     CBAM,
@@ -74,6 +76,7 @@ from .conv import (
     LightConv,
     RepConv,
     SpatialAttention,
+    Involution2,
 )
 from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect
 from .transformer import (
@@ -87,6 +90,8 @@ from .transformer import (
     TransformerBlock,
     TransformerEncoderLayer,
     TransformerLayer,
+    CMHSA,
+    ECTB,
 )
 
 __all__ = (
@@ -160,6 +165,11 @@ __all__ = (
     "Attention",
     "PSA",
     "TorchVision",
+    "Involution",
     "Index",
+    "Involution2",
+    "CustomTR",
+    "CMHSA",
+    "ECTB",
     "A2C2f",
 )
