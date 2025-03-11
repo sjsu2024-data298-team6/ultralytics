@@ -22,6 +22,8 @@ __all__ = (
     "Concat",
     "RepConv",
     "Index",
+    "SeparableConv2d",
+    "BiFPN",
 )
 
 
@@ -348,3 +350,55 @@ class Index(nn.Module):
         Expects a list of tensors as input.
         """
         return x[self.index]
+
+
+
+#################################################################################################
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class SeparableConv2d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+        super().__init__()
+        self.depthwise = nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, groups=in_channels, bias=False)
+        self.pointwise = nn.Conv2d(in_channels, out_channels, 1, bias=False)
+
+    def forward(self, x):
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        return x
+
+class BiFPN(nn.Module):
+    def __init__(self, in_channels, epsilon=1e-4):
+        super().__init__()
+        self.epsilon = epsilon
+        
+        # Learnable weights for feature fusion
+        self.w1 = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
+        self.w2 = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+        
+        # Feature fusion layers
+        self.conv1 = SeparableConv2d(in_channels, in_channels)
+        self.conv2 = SeparableConv2d(in_channels, in_channels)
+        self.conv3 = SeparableConv2d(in_channels, in_channels)
+
+    def forward(self, P3, P4, P5):
+        # Normalize weights
+        w1 = F.relu(self.w1)
+        w1 = w1 / (torch.sum(w1, dim=0) + self.epsilon)
+        
+        w2 = F.relu(self.w2)
+        w2 = w2 / (torch.sum(w2, dim=0) + self.epsilon)
+        
+        # Top-down pathway
+        P4_td = self.conv1(w1[0] * P4 + w1[1] * F.interpolate(P5, scale_factor=2, mode='nearest'))
+        P3_td = self.conv2(w2[0] * P3 + w2[1] * F.interpolate(P4_td, scale_factor=2, mode='nearest'))
+        
+        # Bottom-up pathway
+        P4_out = self.conv1(w2[0] * P4 + w2[1] * P4_td + w2[2] * F.max_pool2d(P3_td, 2))
+        P5_out = self.conv2(w1[0] * P5 + w1[1] * F.max_pool2d(P4_out, 2))
+        
+        return P3_td, P4_out, P5_out
