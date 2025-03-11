@@ -74,6 +74,8 @@ from .conv import (
     LightConv,
     RepConv,
     SpatialAttention,
+    SeparableConv2d,
+    BiFPN,
 )
 from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect, BiFPNLayer, RTDETRDecoderCustom, MultiDetect
 from .transformer import (
@@ -163,4 +165,6 @@ __all__ = (
     "Index",
     "BiFPNLayer", "RTDETRDecoderCustom", "MultiDetect",
     "MHSA",
+    "SeparableConv2d",
+    "BiFPN",
 )
