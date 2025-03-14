@@ -356,7 +356,7 @@ class Index(nn.Module):
 
 
 class BiFPN_Concat3(nn.Module):
-    def __init__(self, dimension=1):
+    def __init__(self, dimension):
         super(BiFPN_Concat3, self).__init__()
         self.d = dimension
         # 设置可学习参数 nn.Parameter的作用是：将一个不可训练的类型Tensor转换成可以训练的类型parameter
