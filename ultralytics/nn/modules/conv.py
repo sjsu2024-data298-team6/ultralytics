@@ -23,6 +23,7 @@ __all__ = (
     "RepConv",
     "Involution2"
     "Index",
+    "BiFPN_Concat3",
 )
 
 
@@ -383,3 +384,18 @@ class Involution2(nn.Module):
         out = (weight * out).sum(dim=3).view(b, self.c1, h, w)
 
         return out
+
+
+class BiFPN_Concat3(nn.Module):
+    def __init__(self, dimension=1):
+        super(BiFPN_Concat3, self).__init__()
+        self.d = dimension
+        self.w = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
+        self.epsilon = 0.0001
+
+    def forward(self, x):
+        w = self.w
+        weight = w / (torch.sum(w, dim=0) + self.epsilon) 
+        # Fast normalized fusion
+        x = [weight[0] * x[0], weight[1] * x[1], weight[2] * x[2]]
+        return torch.cat(x, self.d)
