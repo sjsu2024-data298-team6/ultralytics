@@ -60,6 +60,7 @@ from .block import (
     TorchVision,
     Involution,
     CustomTR,
+    MHSA,
 )
 from .conv import (
     CBAM,
@@ -77,8 +78,9 @@ from .conv import (
     RepConv,
     SpatialAttention,
     Involution2,
+    BiFPN_Concat3,
 )
-from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect
+from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect, BiFPNLayer, RTDETRDecoderCustom, MultiDetect
 from .transformer import (
     AIFI,
     MLP,
@@ -172,4 +174,9 @@ __all__ = (
     "CMHSA",
     "ECTB",
     "A2C2f",
+    "BiFPNLayer",
+    "RTDETRDecoderCustom",
+    "MultiDetect",
+    "MHSA",
+    "BiFPN_Concat3",
 )
