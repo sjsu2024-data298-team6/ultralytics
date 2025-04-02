@@ -1074,7 +1074,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[1] if args[3] else args[1] * 4
         elif m is torch.nn.BatchNorm2d:
             args = [ch[f]]
-        elif m in [Concat, BiFPN_Concat2, BiFPN_Concat3]: # Modified to List and add BiFPN_Concat
+        elif m in [Concat, BiFPN_Concat2, BiFPN_Concat3]: # Modified to List and add BiFPN_Concat 
             c2 = sum(ch[x] for x in f)
         elif m in frozenset({Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn, v10Detect}):
             args.append([ch[x] for x in f])
