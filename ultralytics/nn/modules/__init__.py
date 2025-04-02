@@ -78,6 +78,7 @@ from .conv import (
     RepConv,
     SpatialAttention,
     Involution2,
+    BiFPN_Concat2,
     BiFPN_Concat3,
 )
 from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect, BiFPNLayer, RTDETRDecoderCustom, MultiDetect
@@ -178,5 +179,6 @@ __all__ = (
     "RTDETRDecoderCustom",
     "MultiDetect",
     "MHSA",
+    "BiFPN_Concat2",
     "BiFPN_Concat3",
 )
