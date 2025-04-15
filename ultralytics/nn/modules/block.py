@@ -1158,8 +1158,8 @@ class TorchVision(nn.Module):
             y = self.m(x)
         return y
 
-class Involution(nn.Module):
 
+class Involution(nn.Module):
     def __init__(self, c1, c2, kernel_size, stride):
         super(Involution, self).__init__()
         self.kernel_size = kernel_size
@@ -1168,12 +1168,8 @@ class Involution(nn.Module):
         reduction_ratio = 1
         self.group_channels = 16
         self.groups = self.c1 // self.group_channels
-        self.conv1 = Conv(
-            c1, c1 // reduction_ratio, 1)
-        self.conv2 = Conv(
-            c1 // reduction_ratio,
-            kernel_size ** 2 * self.groups,
-            1, 1)
+        self.conv1 = Conv(c1, c1 // reduction_ratio, 1)
+        self.conv2 = Conv(c1 // reduction_ratio, kernel_size**2 * self.groups, 1, 1)
 
         if stride > 1:
             self.avgpool = nn.AvgPool2d(stride, stride)
@@ -1183,12 +1179,13 @@ class Involution(nn.Module):
         # weight = self.conv2(self.conv1(x if self.stride == 1 else self.avgpool(x)))
         weight = self.conv2(x)
         b, c, h, w = weight.shape
-        weight = weight.view(b, self.groups, self.kernel_size ** 2, h, w).unsqueeze(2)
-        out = self.unfold(x).view(b, self.groups, self.group_channels, self.kernel_size ** 2, h, w)
+        weight = weight.view(b, self.groups, self.kernel_size**2, h, w).unsqueeze(2)
+        out = self.unfold(x).view(b, self.groups, self.group_channels, self.kernel_size**2, h, w)
         out = (weight * out).sum(dim=3).view(b, self.c1, h, w)
 
         return out
-    
+
+
 class CustomTR(C3):
     """C3 module with TransformerBlock()."""
 
@@ -1197,6 +1194,7 @@ class CustomTR(C3):
         super().__init__(c1, c2, n, shortcut, g, e)
         c_ = int(c2 * e)
         self.m = ECTB(c_, c_, 4, n)
+
 
 class AAttn(nn.Module):
     """
@@ -1399,6 +1397,7 @@ class A2C2f(nn.Module):
             return x + self.gamma.view(-1, len(self.gamma), 1, 1) * y
         return y
 
+
 class MHSA(nn.Module):
     def __init__(self, in_channels, embed_dim, num_heads=4, dropout=0.1):
         """
@@ -1436,7 +1435,7 @@ class MHSA(nn.Module):
         # Project input if needed
         if self.proj_in is not None:
             x = self.proj_in(x)  # Now x has shape (B, embed_dim, H, W)
-        
+
         B, D, H, W = x.shape  # D should be embed_dim now
         # Flatten spatial dimensions: (B, embed_dim, H, W) -> (B, N, embed_dim) with N = H*W
         x_flat = x.view(B, D, -1).permute(0, 2, 1)

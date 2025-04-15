@@ -15,7 +15,18 @@ from .conv import Conv, DWConv
 from .transformer import MLP, DeformableTransformerDecoder, DeformableTransformerDecoderLayer
 from .utils import bias_init_with_prob, linear_init
 
-__all__ = "Detect", "Segment", "Pose", "Classify", "OBB", "RTDETRDecoder", "v10Detect", "BiFPNLayer", "RTDETRDecoderCustom", "MultiDetect"
+__all__ = (
+    "Detect",
+    "Segment",
+    "Pose",
+    "Classify",
+    "OBB",
+    "RTDETRDecoder",
+    "v10Detect",
+    "BiFPNLayer",
+    "RTDETRDecoderCustom",
+    "MultiDetect",
+)
 
 
 class Detect(nn.Module):
@@ -635,7 +646,7 @@ class BiFPNLayer(nn.Module):
         self.upsample = nn.Upsample(scale_factor=2, mode="nearest")
         self.downsample = Conv(out_channels, out_channels, 3, 2)
         self.weights = nn.Parameter(torch.ones(3))
-    
+
     def forward(self, x):
         p3, p4, p5 = x.chunk(3, dim=1)
         # Top-down path
@@ -648,15 +659,14 @@ class BiFPNLayer(nn.Module):
         p5_bu = self.downsample(p4_bu) + p5
         return [self.conv_p3(p3_td), self.conv_p4(p4_bu), self.conv_p5(p5_bu)]
 
+
 class RTDETRDecoderCustom(nn.Module):
     def __init__(self, channels, num_layers, num_queries):
-            super().__init__()
-            self.query_embed = nn.Embedding(num_queries, channels)
-            self.layers = nn.ModuleList([
-                nn.TransformerDecoderLayer(channels, 8) for _ in range(num_layers)
-            ])
-            self.proj = Conv(channels, channels, 1, 1)
-    
+        super().__init__()
+        self.query_embed = nn.Embedding(num_queries, channels)
+        self.layers = nn.ModuleList([nn.TransformerDecoderLayer(channels, 8) for _ in range(num_layers)])
+        self.proj = Conv(channels, channels, 1, 1)
+
     def forward(self, inputs):
         p3, p4, p5 = inputs  # List of 3 feature maps from BiFPN
         feats = torch.cat([p.flatten(2).transpose(1, 2) for p in [p3, p4, p5]], dim=1)
@@ -665,15 +675,16 @@ class RTDETRDecoderCustom(nn.Module):
             queries = layer(queries, feats)
         return self.proj(queries)  # [B, 300, 256]
 
+
 class MultiDetect(nn.Module):
     def __init__(self, nc, channels):
         super().__init__()
         self.box_head = nn.Linear(channels, 4)  # Bounding box regression
         self.cls_head = nn.Linear(channels, nc)  # Class prediction
         self.obj_head = nn.Linear(channels, 1)  # Objectness score
-    
+
     def forward(self, x):
         boxes = torch.sigmoid(self.box_head(x))  # [B, 300, 4]
-        classes = self.cls_head(x)               # [B, 300, nc]
-        scores = torch.sigmoid(self.obj_head(x)) # [B, 300, 1]
+        classes = self.cls_head(x)  # [B, 300, nc]
+        scores = torch.sigmoid(self.obj_head(x))  # [B, 300, 1]
         return torch.cat([boxes, scores, classes], dim=-1)

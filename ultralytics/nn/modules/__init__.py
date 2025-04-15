@@ -80,8 +80,21 @@ from .conv import (
     Involution2,
     BiFPN_Concat2,
     BiFPN_Concat3,
+    IJEPA,
 )
-from .head import OBB, Classify, Detect, Pose, RTDETRDecoder, Segment, WorldDetect, v10Detect, BiFPNLayer, RTDETRDecoderCustom, MultiDetect
+from .head import (
+    OBB,
+    Classify,
+    Detect,
+    Pose,
+    RTDETRDecoder,
+    Segment,
+    WorldDetect,
+    v10Detect,
+    BiFPNLayer,
+    RTDETRDecoderCustom,
+    MultiDetect,
+)
 from .transformer import (
     AIFI,
     MLP,
@@ -181,4 +194,5 @@ __all__ = (
     "MHSA",
     "BiFPN_Concat2",
     "BiFPN_Concat3",
+    "IJEPA",
 )

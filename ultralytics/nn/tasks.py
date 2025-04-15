@@ -74,6 +74,7 @@ from ultralytics.nn.modules import (
     MHSA,
     BiFPN_Concat2,
     BiFPN_Concat3,
+    IJEPA,
 )
 from ultralytics.utils import DEFAULT_CFG_DICT, DEFAULT_CFG_KEYS, LOGGER, colorstr, emojis, yaml_load
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
@@ -161,7 +162,28 @@ class BaseModel(torch.nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
             if profile:
                 self._profile_one_layer(m, x, dt)
-            x = m(x)  # run
+            if isinstance(m, IJEPA):
+                # Generate random masks for IJEPA if not provided
+                B, _, H, W = x.shape
+                patch_size = m.patch_size
+                num_patches = (H // patch_size) * (W // patch_size)  # Calculate actual number of patches
+                # Create integer masks for gather operation
+                mask_size = num_patches // 2  # Keep half of the patches
+                # Generate masks for each batch element
+                masks_x = []
+                masks = []
+                for i in range(B):
+                    # Randomly select indices for masks, ensuring they're within bounds
+                    indices = torch.randperm(num_patches, device=x.device)[:mask_size]
+                    masks_x.append(indices)
+                    indices = torch.randperm(num_patches, device=x.device)[:mask_size]
+                    masks.append(indices)
+                # Convert to tensors
+                masks_x = torch.stack(masks_x)
+                masks = torch.stack(masks)
+                x = m(x, masks_x, masks)
+            else:
+                x = m(x)  # run
             y.append(x if m.i in self.save else None)  # save output
             if visualize:
                 feature_visualization(x, m.type, m.i, save_dir=visualize)
@@ -1074,7 +1096,7 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[1] if args[3] else args[1] * 4
         elif m is torch.nn.BatchNorm2d:
             args = [ch[f]]
-        elif m in [Concat, BiFPN_Concat2, BiFPN_Concat3]: # Modified to List and add BiFPN_Concat 
+        elif m in [Concat, BiFPN_Concat2, BiFPN_Concat3]:  # Modified to List and add BiFPN_Concat
             c2 = sum(ch[x] for x in f)
         elif m in frozenset({Detect, WorldDetect, Segment, Pose, OBB, ImagePoolingAttn, v10Detect}):
             args.append([ch[x] for x in f])
@@ -1094,6 +1116,8 @@ def parse_model(d, ch, verbose=True):  # model_dict, input_channels(3)
             c2 = args[0]
             c1 = ch[f]
             args = [*args[1:]]
+        elif m is IJEPA:
+            pass
         else:
             c2 = ch[f]
 

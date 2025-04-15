@@ -1,11 +1,16 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """Convolution modules."""
 
+from functools import partial
 import math
 
 import numpy as np
 import torch
 import torch.nn as nn
+
+from ultralytics.nn.modules.ijepa.src.masks.utils import apply_masks
+from ultralytics.nn.modules.ijepa.src.utils.tensors import repeat_interleave_batch, trunc_normal_
+from ultralytics.nn.modules.ijepa.src.models.vision_transformer import Block, get_2d_sincos_pos_embed, VisionTransformer
 
 __all__ = (
     "Conv",
@@ -25,6 +30,8 @@ __all__ = (
     "Index",
     "BiFPN_Concat2",
     "BiFPN_Concat3",
+    "IJEPA",
+    "VisionTransformer",
 )
 
 
@@ -35,6 +42,120 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     if p is None:
         p = k // 2 if isinstance(k, int) else [x // 2 for x in k]  # auto-pad
     return p
+
+
+class IJEPA(nn.Module):
+    def __init__(
+        self,
+        num_patches,
+        embed_dim=192,
+        predictor_embed_dim=192,
+        depth=6,
+        num_heads=3,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        qk_scale=None,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
+        norm_layer=partial(nn.LayerNorm, eps=1e-6),
+        init_std=0.02,
+        patch_size=16,
+        in_chans=3,
+        **kwargs,
+    ):
+        super().__init__()
+        self.patch_size = patch_size
+        self.patch_embed = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.predictor_embed = nn.Linear(embed_dim, predictor_embed_dim, bias=True)
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, predictor_embed_dim))
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+        # --
+        self.predictor_pos_embed = nn.Parameter(torch.zeros(1, num_patches, predictor_embed_dim), requires_grad=False)
+        predictor_pos_embed = get_2d_sincos_pos_embed(
+            self.predictor_pos_embed.shape[-1], int(num_patches**0.5), cls_token=False
+        )
+        self.predictor_pos_embed.data.copy_(torch.from_numpy(predictor_pos_embed).float().unsqueeze(0))
+        # --
+        self.predictor_blocks = nn.ModuleList(
+            [
+                Block(
+                    dim=predictor_embed_dim,
+                    num_heads=num_heads,
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    qk_scale=qk_scale,
+                    drop=drop_rate,
+                    attn_drop=attn_drop_rate,
+                    drop_path=dpr[i],
+                    norm_layer=norm_layer,
+                )
+                for i in range(depth)
+            ]
+        )
+        self.predictor_norm = norm_layer(predictor_embed_dim)
+        self.predictor_proj = nn.Linear(predictor_embed_dim, embed_dim, bias=True)
+        # Add a projection layer to convert back to image space
+        self.proj = nn.ConvTranspose2d(embed_dim, in_chans, kernel_size=patch_size, stride=patch_size)
+        # ------
+        self.init_std = init_std
+        trunc_normal_(self.mask_token, std=self.init_std)
+        self.apply(self._init_weights)
+        self.fix_init_weight()
+
+    def fix_init_weight(self):
+        def rescale(param, layer_id):
+            param.div_(math.sqrt(2.0 * layer_id))
+
+        for layer_id, layer in enumerate(self.predictor_blocks):
+            rescale(layer.attn.proj.weight.data, layer_id + 1)
+            rescale(layer.mlp.fc2.weight.data, layer_id + 1)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=self.init_std)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            trunc_normal_(m.weight, std=self.init_std)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x, masks_x=None, masks=None):
+        # Store original shape
+        B, C, H, W = x.shape
+
+        # Convert YOLO-style input to patch embeddings
+        x = self.patch_embed(x)  # (B, embed_dim, H/patch_size, W/patch_size)
+        x = x.flatten(2).transpose(1, 2)  # (B, num_patches, embed_dim)
+
+        # Get dimensions
+        B, N, D = x.shape  # batch size, number of patches, embedding dimension
+
+        # Map from encoder-dim to predictor-dim
+        x = self.predictor_embed(x)  # (B, N, predictor_embed_dim)
+
+        # Add positional embedding
+        pos_embed = self.predictor_pos_embed[:, :N]  # (1, N, predictor_embed_dim)
+        x = x + pos_embed  # (B, N, predictor_embed_dim)
+
+        # Process through transformer blocks
+        for blk in self.predictor_blocks:
+            x = blk(x)
+        x = self.predictor_norm(x)
+
+        # Project back to original dimension
+        x = self.predictor_proj(x)  # (B, N, embed_dim)
+
+        # Reshape back to image space
+        x = x.transpose(1, 2)  # (B, embed_dim, N)
+        x = x.view(B, -1, H // self.patch_size, W // self.patch_size)  # (B, embed_dim, H/patch_size, W/patch_size)
+        x = self.proj(x)  # (B, in_chans, H, W)
+
+        return x
 
 
 class Conv(nn.Module):
@@ -351,13 +472,12 @@ class Index(nn.Module):
         Expects a list of tensors as input.
         """
         return x[self.index]
-    
+
 
 class Involution2(nn.Module):
-
     def __init__(self, c1, c2, kernel_size, stride, g):
-    #def __init__(self, c1, kernel_size, stride):
-        #super(Involution2, self).__init__()
+        # def __init__(self, c1, kernel_size, stride):
+        # super(Involution2, self).__init__()
         super().__init__()
         self.kernel_size = kernel_size
         self.stride = stride
@@ -365,12 +485,8 @@ class Involution2(nn.Module):
         reduction_ratio = 1
         self.group_channels = 16
         self.groups = self.c1 // self.group_channels
-        self.conv1 = Conv(
-            c1, c1 // reduction_ratio, 1)
-        self.conv2 = Conv(
-            c1 // reduction_ratio,
-            kernel_size ** 2 * self.groups,
-            1, 1)
+        self.conv1 = Conv(c1, c1 // reduction_ratio, 1)
+        self.conv2 = Conv(c1 // reduction_ratio, kernel_size**2 * self.groups, 1, 1)
 
         if stride > 1:
             self.avgpool = nn.AvgPool2d(stride, stride)
@@ -380,8 +496,8 @@ class Involution2(nn.Module):
         # weight = self.conv2(self.conv1(x if self.stride == 1 else self.avgpool(x)))
         weight = self.conv2(x)
         b, c, h, w = weight.shape
-        weight = weight.view(b, self.groups, self.kernel_size ** 2, h, w).unsqueeze(2)
-        out = self.unfold(x).view(b, self.groups, self.group_channels, self.kernel_size ** 2, h, w)
+        weight = weight.view(b, self.groups, self.kernel_size**2, h, w).unsqueeze(2)
+        out = self.unfold(x).view(b, self.groups, self.group_channels, self.kernel_size**2, h, w)
         out = (weight * out).sum(dim=3).view(b, self.c1, h, w)
 
         return out
@@ -397,8 +513,9 @@ class BiFPN_Concat2(nn.Module):
     def forward(self, x):
         w = self.w
         weight = w / (torch.sum(w, dim=0) + self.epsilon)
-        x = [weight[0] * x[0], weight[1] *x [1]]
+        x = [weight[0] * x[0], weight[1] * x[1]]
         return torch.cat(x, self.d)
+
 
 class BiFPN_Concat3(nn.Module):
     def __init__(self, dimension=1):
@@ -409,7 +526,7 @@ class BiFPN_Concat3(nn.Module):
 
     def forward(self, x):
         w = self.w
-        weight = w / (torch.sum(w, dim=0) + self.epsilon) 
+        weight = w / (torch.sum(w, dim=0) + self.epsilon)
         # Fast normalized fusion
         x = [weight[0] * x[0], weight[1] * x[1], weight[2] * x[2]]
         return torch.cat(x, self.d)
