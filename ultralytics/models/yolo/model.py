@@ -21,6 +21,12 @@ class YOLO(Model):
         else:
             # Continue with default YOLO initialization
             super().__init__(model=model, task=task, verbose=verbose)
+        try:
+            self.yaml: dict
+            if self.yaml.get("nobatch", False):
+                self.fuse()
+        finally:
+            pass
 
     @property
     def task_map(self):
