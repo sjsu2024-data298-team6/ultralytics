@@ -1187,7 +1187,7 @@ class MHSA(nn.Module):
             self.proj_out = None
 
         # MultiheadAttention expects input shape (B, N, embed_dim) where N=H*W.
-        self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.mhsa = nn.MultiheadAttention(embed_dim=128, num_heads, dropout=dropout, batch_first=True)
         self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
 
