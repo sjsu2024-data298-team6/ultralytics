@@ -1196,6 +1196,8 @@ class MHSA(nn.Module):
         :param x: Input feature map of shape (B, in_channels, H, W)
         :return: Feature map with the same shape (B, in_channels, H, W)
         """
+        assert x.shape[1] == self.in_channels, \
+            f"[MHSA] Expected input channels = {self.in_channels}, but got {x.shape[1]}"
         # Project input if needed
         if self.proj_in is not None:
             x = self.proj_in(x)  # Now x has shape (B, embed_dim, H, W)
