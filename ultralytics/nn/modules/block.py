@@ -1163,7 +1163,7 @@ import torch
 import torch.nn as nn
 
 class MHSA(nn.Module):
-    def __init__(self, in_channels, embed_dim=128, num_heads=4, dropout=0.1):
+    def __init__(self, in_channels, embed_dim, num_heads=4, dropout=0.1):
         """
         Multi-Head Self-Attention Block with projection layers to handle mismatched dimensions.
 
@@ -1176,8 +1176,6 @@ class MHSA(nn.Module):
         super(MHSA, self).__init__()
         self.in_channels = in_channels
         self.embed_dim = embed_dim
-
-        emb=128
         
         # If the input channels are not equal to the desired embedding dimension,
         # project the input to embed_dim and then back to in_channels.
@@ -1189,8 +1187,8 @@ class MHSA(nn.Module):
             self.proj_out = None
 
         # MultiheadAttention expects input shape (B, N, embed_dim) where N=H*W.
-        self.mhsa = nn.MultiheadAttention(emb, num_heads, dropout=dropout, batch_first=True)
-        self.norm = nn.LayerNorm(emb)
+        self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
