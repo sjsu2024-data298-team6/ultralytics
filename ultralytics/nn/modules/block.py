@@ -1177,6 +1177,8 @@ class MHSA(nn.Module):
         self.in_channels = in_channels
         self.embed_dim = embed_dim
 
+        emb=128
+        
         # If the input channels are not equal to the desired embedding dimension,
         # project the input to embed_dim and then back to in_channels.
         if in_channels != embed_dim:
@@ -1187,8 +1189,8 @@ class MHSA(nn.Module):
             self.proj_out = None
 
         # MultiheadAttention expects input shape (B, N, embed_dim) where N=H*W.
-        self.mhsa = nn.MultiheadAttention(embed_dim=128, num_heads, dropout=dropout, batch_first=True)
-        self.norm = nn.LayerNorm(embed_dim)
+        self.mhsa = nn.MultiheadAttention(emb, num_heads, dropout=dropout, batch_first=True)
+        self.norm = nn.LayerNorm(emb)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
