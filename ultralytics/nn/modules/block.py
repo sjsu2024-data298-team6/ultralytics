@@ -1162,93 +1162,59 @@ class TorchVision(nn.Module):
 import torch
 import torch.nn as nn
 
-# class MHSA(nn.Module):
-#     def __init__(self, in_channels, embed_dim, num_heads=4, dropout=0.1):
-#         """
-#         Multi-Head Self-Attention Block with projection layers to handle mismatched dimensions.
-
-#         :param in_channels: Number of channels in the input feature map.
-#         :param embed_dim: Embedding dimension for the attention mechanism.
-#                           If different from in_channels, a projection is applied.
-#         :param num_heads: Number of attention heads.
-#         :param dropout: Dropout rate.
-#         """
-#         super(MHSA, self).__init__()
-#         self.in_channels = in_channels
-#         self.embed_dim = embed_dim
-
-#         # If the input channels are not equal to the desired embedding dimension,
-#         # project the input to embed_dim and then back to in_channels.
-#         if in_channels != embed_dim:
-#             self.proj_in = nn.Conv2d(in_channels, embed_dim, kernel_size=1)
-#             self.proj_out = nn.Conv2d(embed_dim, in_channels, kernel_size=1)
-#         else:
-#             self.proj_in = None
-#             self.proj_out = None
-
-#         # MultiheadAttention expects input shape (B, N, embed_dim) where N=H*W.
-#         self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
-#         self.norm = nn.LayerNorm(embed_dim)
-#         self.dropout = nn.Dropout(dropout)
-
-#     def forward(self, x):
-#         """
-#         :param x: Input feature map of shape (B, in_channels, H, W)
-#         :return: Feature map with the same shape (B, in_channels, H, W)
-#         """
-#         # Project input if needed
-#         if self.proj_in is not None:
-#             x = self.proj_in(x)  # Now x has shape (B, embed_dim, H, W)
-        
-#         B, D, H, W = x.shape  # D should be embed_dim now
-#         # Flatten spatial dimensions: (B, embed_dim, H, W) -> (B, N, embed_dim) with N = H*W
-#         x_flat = x.view(B, D, -1).permute(0, 2, 1)
-
-#         # Apply multi-head self-attention
-#         attn_output, _ = self.mhsa(x_flat, x_flat, x_flat)
-#         x_flat = self.norm(x_flat + self.dropout(attn_output))
-
-#         # Reshape back to (B, embed_dim, H, W)
-#         x = x_flat.permute(0, 2, 1).view(B, D, H, W)
-
-#         # Project back to original channel dimension if necessary
-#         if self.proj_out is not None:
-#             x = self.proj_out(x)
-#         return x
-
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 class MHSA(nn.Module):
     def __init__(self, in_channels, embed_dim, num_heads=4, dropout=0.1):
+        """
+        Multi-Head Self-Attention Block with projection layers to handle mismatched dimensions.
+
+        :param in_channels: Number of channels in the input feature map.
+        :param embed_dim: Embedding dimension for the attention mechanism.
+                          If different from in_channels, a projection is applied.
+        :param num_heads: Number of attention heads.
+        :param dropout: Dropout rate.
+        """
         super(MHSA, self).__init__()
         self.in_channels = in_channels
         self.embed_dim = embed_dim
-        self.num_heads = num_heads
 
-        self.proj_in = nn.Conv2d(in_channels, embed_dim, kernel_size=1) if in_channels != embed_dim else nn.Identity()
-        self.proj_out = nn.Conv2d(embed_dim, in_channels, kernel_size=1) if in_channels != embed_dim else nn.Identity()
+        # If the input channels are not equal to the desired embedding dimension,
+        # project the input to embed_dim and then back to in_channels.
+        if in_channels != embed_dim:
+            self.proj_in = nn.Conv2d(in_channels, embed_dim, kernel_size=1)
+            self.proj_out = nn.Conv2d(embed_dim, in_channels, kernel_size=1)
+        else:
+            self.proj_in = None
+            self.proj_out = None
 
+        # MultiheadAttention expects input shape (B, N, embed_dim) where N=H*W.
         self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
         self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         """
-        :param x: Input tensor of shape (B, in_channels, H, W)
-        :return: Output tensor of same shape (B, in_channels, H, W)
+        :param x: Input feature map of shape (B, in_channels, H, W)
+        :return: Feature map with the same shape (B, in_channels, H, W)
         """
-        B, _, H, W = x.shape
-        x = self.proj_in(x)  # (B, embed_dim, H, W)
-        x_reshaped = x.flatten(2).permute(0, 2, 1)  # (B, N=H*W, embed_dim)
+        # Project input if needed
+        if self.proj_in is not None:
+            x = self.proj_in(x)  # Now x has shape (B, embed_dim, H, W)
+        
+        B, D, H, W = x.shape  # D should be embed_dim now
+        # Flatten spatial dimensions: (B, embed_dim, H, W) -> (B, N, embed_dim) with N = H*W
+        x_flat = x.view(B, D, -1).permute(0, 2, 1)
 
-        attn_output, _ = self.mhsa(x_reshaped, x_reshaped, x_reshaped)  # (B, N, embed_dim)
-        x_attended = self.norm(x_reshaped + self.dropout(attn_output))  # (B, N, embed_dim)
+        # Apply multi-head self-attention
+        attn_output, _ = self.mhsa(x_flat, x_flat, x_flat)
+        x_flat = self.norm(x_flat + self.dropout(attn_output))
 
-        x_attended = x_attended.permute(0, 2, 1).view(B, self.embed_dim, H, W)  # (B, embed_dim, H, W)
-        x_out = self.proj_out(x_attended)  # (B, in_channels, H, W)
+        # Reshape back to (B, embed_dim, H, W)
+        x = x_flat.permute(0, 2, 1).view(B, D, H, W)
 
-        return x_out
+        # Project back to original channel dimension if necessary
+        if self.proj_out is not None:
+            x = self.proj_out(x)
+        return x
+
+
 
