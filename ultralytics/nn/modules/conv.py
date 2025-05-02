@@ -377,6 +377,8 @@ class BiFPN_Concat3(nn.Module):
         self.epsilon = 0.0001
 
     def forward(self, x):
+        for i, xi in enumerate(x):
+            print(f"BiFPN_Concat3 input[{i}] shape: {xi.shape}")
         w = self.w
         weight = w / (torch.sum(w, dim=0) + self.epsilon) 
         # Fast normalized fusion
