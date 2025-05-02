@@ -376,22 +376,22 @@ class BiFPN_Concat3(nn.Module):
         self.w = nn.Parameter(torch.ones(3, dtype=torch.float32), requires_grad=True)
         self.epsilon = 0.0001
 
-    # def forward(self, x):
-    #     w = self.w
-    #     weight = w / (torch.sum(w, dim=0) + self.epsilon) 
-    #     # Fast normalized fusion
-    #     x = [weight[0] * x[0], weight[1] * x[1], weight[2] * x[2]]
-    #     return torch.cat(x, self.d)
-
-
     def forward(self, x):
-        # Resize all to the size of x[0]
-        target_size = x[0].shape[2:]  # Assuming spatial dims
-        x_resized = [
-            F.interpolate(xi, size=target_size, mode='nearest') if xi.shape[2:] != target_size else xi
-            for xi in x
-        ]
+        w = self.w
+        weight = w / (torch.sum(w, dim=0) + self.epsilon) 
+        # Fast normalized fusion
+        x = [weight[0] * x[0], weight[1] * x[1], weight[2] * x[2]]
+        return torch.cat(x, self.d)
 
-        weight = self.w / (torch.sum(self.w) + self.epsilon)
-        x_weighted = [weight[i] * x_resized[i] for i in range(3)]
-        return torch.cat(x_weighted, self.d)
+
+    # def forward(self, x):
+    #     # Resize all to the size of x[0]
+    #     target_size = x[0].shape[2:]  # Assuming spatial dims
+    #     x_resized = [
+    #         F.interpolate(xi, size=target_size, mode='nearest') if xi.shape[2:] != target_size else xi
+    #         for xi in x
+    #     ]
+
+    #     weight = self.w / (torch.sum(self.w) + self.epsilon)
+    #     x_weighted = [weight[i] * x_resized[i] for i in range(3)]
+    #     return torch.cat(x_weighted, self.d)
