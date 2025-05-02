@@ -1176,7 +1176,7 @@ class MHSA(nn.Module):
         super(MHSA, self).__init__()
         self.in_channels = in_channels
         self.embed_dim = embed_dim
-        
+
         # If the input channels are not equal to the desired embedding dimension,
         # project the input to embed_dim and then back to in_channels.
         if in_channels != embed_dim:
@@ -1190,32 +1190,30 @@ class MHSA(nn.Module):
         self.mhsa = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout, batch_first=True)
         self.norm = nn.LayerNorm(embed_dim)
         self.dropout = nn.Dropout(dropout)
-    
+
     def forward(self, x):
         """
-        :param x: Input feature map of shape (B, C_in, H, W)
-        :return: Feature map with shape (B, in_channels, H, W)
+        :param x: Input feature map of shape (B, in_channels, H, W)
+        :return: Feature map with the same shape (B, in_channels, H, W)
         """
-        B, C_in, H, W = x.shape
-    
-        # 🔁 Always project input to embed_dim (even if user passed wrong in_channels)
-        if C_in != self.embed_dim:
-            x = nn.Conv2d(C_in, self.embed_dim, kernel_size=1).to(x.device)(x)
-    
-        # Flatten spatial dimensions
-        x_flat = x.view(B, self.embed_dim, -1).permute(0, 2, 1)  # (B, N, embed_dim)
-    
-        # Apply MHSA
+        # Project input if needed
+        if self.proj_in is not None:
+            x = self.proj_in(x)  # Now x has shape (B, embed_dim, H, W)
+        
+        B, D, H, W = x.shape  # D should be embed_dim now
+        # Flatten spatial dimensions: (B, embed_dim, H, W) -> (B, N, embed_dim) with N = H*W
+        x_flat = x.view(B, D, -1).permute(0, 2, 1)
+
+        # Apply multi-head self-attention
         attn_output, _ = self.mhsa(x_flat, x_flat, x_flat)
         x_flat = self.norm(x_flat + self.dropout(attn_output))
-    
+
         # Reshape back to (B, embed_dim, H, W)
-        x = x_flat.permute(0, 2, 1).view(B, self.embed_dim, H, W)
-    
-        # Optional: project back to original channel size
-        if C_in != self.embed_dim:
-            x = nn.Conv2d(self.embed_dim, C_in, kernel_size=1).to(x.device)(x)
-    
+        x = x_flat.permute(0, 2, 1).view(B, D, H, W)
+
+        # Project back to original channel dimension if necessary
+        if self.proj_out is not None:
+            x = self.proj_out(x)
         return x
 
     # def forward(self, x):
