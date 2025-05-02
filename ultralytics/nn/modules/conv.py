@@ -377,11 +377,30 @@ class BiFPN_Concat3(nn.Module):
         self.epsilon = 0.0001
 
     def forward(self, x):
-        w = self.w
-        weight = w / (torch.sum(w, dim=0) + self.epsilon) 
-        # Fast normalized fusion
-        x = [weight[0] * x[0], weight[1] * x[1], weight[2] * x[2]]
-        return torch.cat(x, self.d)
+        # Normalize weights
+        weight = self.w / (torch.sum(self.w) + self.epsilon)
+
+        # Find the smallest spatial resolution among inputs
+        target_size = min([xi.shape[2:] for xi in x], key=lambda s: s[0] * s[1])
+
+        # Resize each input to the target_size if needed
+        x_resized = [
+            F.interpolate(xi, size=target_size, mode='nearest') if xi.shape[2:] != target_size else xi
+            for xi in x
+        ]
+
+        # Apply normalized fusion
+        x_weighted = [weight[i] * x_resized[i] for i in range(3)]
+
+        # Concatenate along the specified dimension (usually channels)
+        return torch.cat(x_weighted, dim=self.d)
+
+    # def forward(self, x):
+    #     w = self.w
+    #     weight = w / (torch.sum(w, dim=0) + self.epsilon) 
+    #     # Fast normalized fusion
+    #     x = [weight[0] * x[0], weight[1] * x[1], weight[2] * x[2]]
+    #     return torch.cat(x, self.d)
 
 
     # def forward(self, x):
